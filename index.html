@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111318">
+<meta name="description" content="iPhone向け複数写真一括編集ツール">
+<title>Photo Batch Editor</title>
+<style>
+:root{color-scheme:dark;--bg:#111318;--panel:#1c2028;--panel2:#252a34;--text:#f5f6f8;--muted:#a5adbb;--accent:#4f8cff;--line:#343b48}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{width:min(900px,100%);margin:auto;padding:18px 16px 44px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.brand{font-size:21px;font-weight:750;letter-spacing:-.4px}.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin:14px 0}
+.section-title{font-size:15px;font-weight:700;margin:0 0 12px}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
+.btn{appearance:none;border:0;border-radius:12px;padding:13px 15px;font-size:14px;font-weight:700;color:white;background:var(--accent);cursor:pointer;min-height:46px}
+.btn.secondary{background:var(--panel2);border:1px solid var(--line)}
+.btn:disabled{opacity:.45;cursor:not-allowed}.btn.full{width:100%}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.note,.footer{font-size:12px;color:var(--muted);line-height:1.6;margin:10px 1px 0}
+.count{font-size:12px;color:var(--muted)}
+.photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.photo-card{min-width:0;border:2px solid transparent;border-radius:12px;overflow:hidden;background:var(--panel2);padding:0;color:inherit;text-align:left;cursor:pointer}
+.photo-card.selected{border-color:var(--accent)}
+.photo-card canvas{width:100%;aspect-ratio:1;display:block;object-fit:contain;background:#08090c}
+.photo-meta{display:flex;align-items:center;justify-content:space-between;gap:4px;padding:7px 8px;font-size:11px}
+.photo-meta .filename{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.check{flex:none;width:18px;height:18px;border-radius:50%;border:1px solid #ffffff88;display:grid;place-items:center;font-size:11px}
+.selected .check{background:var(--accent);border-color:var(--accent)}
+.control{margin:20px 0 24px}
+.control-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.control-head label{font-weight:650;font-size:14px}
+.value{font-variant-numeric:tabular-nums;color:#cbd8ff;font-size:14px;font-weight:650}
+.range-row{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent;touch-action:pan-y;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:#485264;border-radius:9px}
+input[type=range]::-moz-range-track{height:4px;background:#485264;border-radius:9px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-9px;border-radius:50%;background:#fff;border:1px solid #cbd5e1;box-shadow:0 1px 4px #0008}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid #cbd5e1}
+.zero{font-size:11px;color:var(--muted);text-align:center;margin-top:3px}
+.status{font-size:12px;color:var(--muted);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.progress{height:6px;border-radius:8px;background:var(--panel2);overflow:hidden;margin-top:10px}
+.bar{height:100%;width:0;background:var(--accent);transition:width .12s linear}
+.pill{font-size:11px;color:#cbd8ff;background:#263754;padding:5px 8px;border-radius:99px}
+.download-list{display:grid;gap:9px;margin-top:12px}
+.download-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);font-size:13px}
+.download-item .file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.download-item a{flex:none;color:#cbd8ff;font-weight:700;text-decoration:none;padding:8px 10px;border-radius:9px;background:#263754}
+.hidden{display:none!important}
+@media(min-width:600px){.photo-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:360px){.photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top"><div><div class="brand">Photo Batch Editor</div><div class="sub">露出・明るさを複数の写真に一括適用</div></div><span class="pill">β版 2.0</span></header>
+
+  <section class="panel">
+    <h2 class="section-title">1. 写真を選択</h2>
+    <div class="actions">
+      <button class="btn" id="addBtn" type="button">写真を追加</button>
+      <button class="btn secondary" id="selectAllBtn" type="button" disabled>すべて選択</button>
+      <button class="btn secondary" id="clearBtn" type="button" disabled>選択解除</button>
+    </div>
+    <input id="fileInput" type="file" accept="image/*" multiple>
+    <p class="note">Safari・Google Chromeなどのブラウザに対応しています。iPhone版ChromeもiOSのブラウザ制限の影響を受けます。複数枚を選択できます。写真を追加しても、すでに読み込んだ写真は保持されます。写真カードをタップすると一括加工の対象を切り替えられます。</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px"><strong style="font-size:13px">写真一覧・加工プレビュー</strong><span class="count" id="count">0枚</span></div>
+    <div class="photo-grid" id="photoGrid"><div class="note">まだ写真が選択されていません</div></div>
+  </section>
+
+  <section class="panel">
+    <h2 class="section-title">2. 調整内容</h2>
+    <div class="control">
+      <div class="control-head"><label for="exposure">露出</label><output class="value" id="exposureValue">0</output></div>
+      <div class="range-row"><span>−100</span><input id="exposure" type="range" min="-100" max="100" step="1" value="0"><span>＋100</span></div>
+      <div class="zero">0 = 変更なし</div>
+    </div>
+    <div class="control">
+      <div class="control-head"><label for="brightness">明るさ</label><output class="value" id="brightnessValue">0</output></div>
+      <div class="range-row"><span>−100</span><input id="brightness" type="range" min="-100" max="100" step="1" value="0"><span>＋100</span></div>
+      <div class="zero">0 = 変更なし</div>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="resetBtn" type="button">調整をリセット</button>
+    </div>
+    <p class="note">スライダーを動かすと、写真一覧のプレビューが順次更新されます。選択中の写真に同じ調整値を適用します。</p>
+  </section>
+
+  <section class="panel">
+    <h2 class="section-title">3. 加工・保存</h2>
+    <button class="btn full" id="exportBtn" type="button" disabled>選択した写真を一括加工</button>
+    <div style="height:12px"></div>
+    <div id="downloadList" class="download-list hidden"></div>
+    <button class="btn secondary full hidden" id="shareBtn" type="button" style="margin-top:10px">加工した写真を共有</button>
+    <div style="height:12px"></div>
+    <div class="status" id="status">加工後は写真ごとに個別のJPEGをダウンロードできます。ZIPは作成しません。元の写真は変更しません。</div>
+    <div class="progress"><div class="bar" id="bar"></div></div>
+  </section>
+  <p class="footer">画像はブラウザ内で処理し、サーバーへアップロードしません。露出の−100〜+100はiPhone写真アプリと同じ表示範囲にしていますが、Appleの非公開変換式は公開されていないため、内部の数値変換と仕上がりは近似です。JPEGとして書き出すため、元のEXIF情報・Live Photos情報は保持されません。</p>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = {
+    photos: [], exposure: 0, brightness: 0, busy: false,
+    previewFrame: 0, previewToken: 0, outputFiles: [], zipFile: null, zipUrl: null
+  };
+  const fileInput = $('fileInput');
+
+  $('addBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const incoming = Array.from(fileInput.files || []).filter(f => f.type.startsWith('image/'));
+    for (const file of incoming) {
+      const duplicate = state.photos.some(p => p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified);
+      if (!duplicate) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        const ready = new Promise((resolve, reject) => {
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`${file.name} を読み込めませんでした`));
+        });
+        img.src = url;
+        state.photos.push({file, url, img, ready, selected:true});
+      }
+    }
+    fileInput.value = '';
+    renderCards();
+    updateControls();
+    schedulePreviews();
+  });
+
+  $('selectAllBtn').addEventListener('click', () => {
+    state.photos.forEach(p => p.selected = true); renderCards(); updateControls(); schedulePreviews();
+  });
+  $('clearBtn').addEventListener('click', () => {
+    state.photos.forEach(p => p.selected = false); renderCards(); updateControls(); schedulePreviews();
+  });
+  $('resetBtn').addEventListener('click', () => {
+    state.exposure = 0; state.brightness = 0;
+    $('exposure').value = '0'; $('brightness').value = '0';
+    updateLabels(); schedulePreviews();
+  });
+  $('exposure').addEventListener('input', e => {
+    state.exposure = Number(e.target.value); updateLabels(); schedulePreviews();
+  });
+  $('brightness').addEventListener('input', e => {
+    state.brightness = Number(e.target.value); updateLabels(); schedulePreviews();
+  });
+  $('exportBtn').addEventListener('click', exportSelected);
+  $('shareBtn').addEventListener('click', shareResults);
+
+  function updateLabels() {
+    $('exposureValue').textContent = `${state.exposure > 0 ? '+' : ''}${state.exposure}`;
+    $('brightnessValue').textContent = `${state.brightness > 0 ? '+' : ''}${state.brightness}`;
+  }
+  function selectedPhotos() { return state.photos.filter(p => p.selected); }
+  function updateControls() {
+    const count = selectedPhotos().length;
+    $('count').textContent = `${count}枚選択中 / ${state.photos.length}枚`;
+    const has = state.photos.length > 0;
+    $('selectAllBtn').disabled = $('clearBtn').disabled = !has;
+    $('exportBtn').disabled = count === 0 || state.busy;
+  }
+  function renderCards() {
+    const root = $('photoGrid');
+    root.replaceChildren();
+    if (!state.photos.length) {
+      const empty = document.createElement('div'); empty.className = 'note'; empty.textContent = 'まだ写真が選択されていません'; root.append(empty); return;
+    }
+    state.photos.forEach((p, i) => {
+      const card = document.createElement('button');
+      card.type = 'button'; card.className = `photo-card${p.selected ? ' selected' : ''}`;
+      card.setAttribute('aria-label', `${p.file.name} ${p.selected ? '選択中' : '選択対象外'}。タップして切り替え`);
+      const canvas = document.createElement('canvas');
+      canvas.width = 240; canvas.height = 240; canvas.dataset.photoIndex = String(i);
+      const meta = document.createElement('div'); meta.className = 'photo-meta';
+      const name = document.createElement('span'); name.className = 'filename'; name.textContent = p.file.name;
+      const check = document.createElement('span'); check.className = 'check'; check.textContent = p.selected ? '✓' : '';
+      meta.append(name, check); card.append(canvas, meta);
+      card.addEventListener('click', () => {
+        p.selected = !p.selected; renderCards(); updateControls(); schedulePreviews();
+      });
+      root.append(card);
+    });
+  }
+
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function srgbToLinear(v) {
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  function linearToSrgb(v) {
+    v = clamp01(v);
+    return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  }
+  function applyAdjustments(ctx, width, height, exposure, brightness) {
+    if (exposure === 0 && brightness === 0) return;
+    const frame = ctx.getImageData(0, 0, width, height);
+    const d = frame.data;
+    // UI range matches Photos' -100..+100 display scale.
+    // Exact Apple mapping is private; +/-100 is approximated as +/-2 EV.
+    const ev = exposure / 50;
+    const gain = Math.pow(2, ev);
+    // Brightness is a restrained linear-light offset, not a claimed Apple-equivalent curve.
+    const offset = brightness / 100 * 0.18;
+    for (let i = 0; i < d.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        const linear = srgbToLinear(d[i + c] / 255);
+        const adjusted = clamp01(linear * gain + offset);
+        d[i + c] = Math.round(linearToSrgb(adjusted) * 255);
+      }
+    }
+    ctx.putImageData(frame, 0, 0);
+  }
+  function drawPhotoPreview(p, canvas) {
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    const img = p.img;
+    const scale = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    canvas.width = w; canvas.height = h;
+    const c = canvas.getContext('2d', {willReadFrequently:true});
+    c.drawImage(img, 0, 0, w, h);
+    if (p.selected) applyAdjustments(c, w, h, state.exposure, state.brightness);
+  }
+  function schedulePreviews() {
+    if (state.previewFrame) cancelAnimationFrame(state.previewFrame);
+    const token = ++state.previewToken;
+    state.previewFrame = requestAnimationFrame(async () => {
+      state.previewFrame = 0;
+      const canvases = Array.from(document.querySelectorAll('.photo-card canvas'));
+      for (const canvas of canvases) {
+        if (token !== state.previewToken) return;
+        const p = state.photos[Number(canvas.dataset.photoIndex)];
+        if (!p) continue;
+        try { await p.ready; drawPhotoPreview(p, canvas); }
+        catch (err) { $('status').textContent = err.message; }
+      }
+    });
+  }
+  function renderFullImage(img, exposure, brightness) {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    ctx.drawImage(img, 0, 0);
+    applyAdjustments(ctx, canvas.width, canvas.height, exposure, brightness);
+    return canvas;
+  }
+  function canvasBlob(canvas) {
+    return new Promise((resolve, reject) => canvas.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error('JPEGの生成に失敗しました')),
+      'image/jpeg', 0.94
+    ));
+  }
+  function safeName(name) { return name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_'); }
+
+  async function exportSelected() {
+    const photos = selectedPhotos();
+    if (!photos.length || state.busy) return;
+    state.busy = true; updateControls();
+    $('downloadList').classList.add('hidden');
+    $('downloadList').replaceChildren();
+    $('shareBtn').classList.add('hidden');
+    $('status').textContent = `加工中... 0 / ${photos.length}枚`;
+    $('bar').style.width = '0%';
+    const results = [];
+    try {
+      for (let i = 0; i < photos.length; i++) {
+        const p = photos[i]; await p.ready;
+        const canvas = renderFullImage(p.img, state.exposure, state.brightness);
+        const blob = await canvasBlob(canvas);
+        const filename = `${safeName(p.file.name)}_edited.jpg`;
+        results.push(new File([blob], filename, {type:'image/jpeg',lastModified:Date.now()}));
+        $('status').textContent = `加工中... ${i+1} / ${photos.length}枚`;
+        $('bar').style.width = `${Math.round((i+1)/photos.length*100)}%`;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      state.outputFiles = results;
+      renderDownloadLinks(results);
+      $('downloadList').classList.remove('hidden');
+      $('shareBtn').classList.remove('hidden');
+      $('status').textContent = `${results.length}枚の加工が完了しました。保存したい写真の「ダウンロード」を1枚ずつタップしてください。共有ボタンから複数枚をまとめて共有することもできます。`;
+    } catch (err) {
+      $('status').textContent = `エラー：${err.message || err}`;
+    } finally {
+      state.busy = false; updateControls();
+    }
+  }
+
+  function renderDownloadLinks(files) {
+    const root = $('downloadList');
+    root.replaceChildren();
+    files.forEach(file => {
+      const url = URL.createObjectURL(file);
+      const row = document.createElement('div');
+      row.className = 'download-item';
+      const name = document.createElement('span');
+      name.className = 'file-name';
+      name.textContent = file.name;
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name;
+      link.textContent = 'ダウンロード';
+      link.setAttribute('aria-label', `${file.name}をダウンロード`);
+      row.append(name, link);
+      root.append(row);
+    });
+  }
+
+  function shareResults() {
+    // Must be invoked directly from the user's tap. No ZIP is created.
+    if (!state.outputFiles.length || !navigator.share) {
+      $('status').textContent = 'このブラウザではファイル共有に対応していません。各写真の「ダウンロード」をタップしてください。';
+      return;
+    }
+    const shareData = {files:state.outputFiles, title:'加工した写真'};
+    if (navigator.canShare && !navigator.canShare({files:state.outputFiles})) {
+      $('status').textContent = 'このブラウザでは複数ファイルの共有に対応していません。各写真を個別にダウンロードしてください。';
+      return;
+    }
+    navigator.share(shareData).then(() => {
+      $('status').textContent = '共有メニューを終了しました。保存先を選択してください。';
+    }).catch(err => {
+      if (err && err.name === 'AbortError') $('status').textContent = '共有をキャンセルしました。個別ダウンロードは引き続き利用できます。';
+      else $('status').textContent = `共有できませんでした（${err.name || 'Error'}）。各写真を個別にダウンロードしてください。`;
+    });
+  }
+
+  updateLabels(); renderCards(); updateControls();
+})();
+</script>
+</body>
+</html>
